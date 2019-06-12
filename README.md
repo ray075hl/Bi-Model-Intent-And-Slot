@@ -11,7 +11,7 @@ Dataset: **ATIS**.
 
 Result with decoder as paper described.
 
-2019-06-12: accuracy of intent detection is  *94.51%*  (about 10 epoch).
+2019-06-12: accuracy of intent detection is  *97.19%*  (about 10 epoch).
 
 
 
