@@ -127,6 +127,16 @@ def getBatch(batch_size, train_data):
         yield batch
 
 
+def getBatch_val(train_data):
+    batch_size = 16
+    sindex = 0
+    while sindex < len(train_data):
+        batch = train_data[sindex:sindex+batch_size]
+        sindex = sindex + batch_size
+
+        yield batch
+
+
 def load_dictionary():
     processed_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data/")
 

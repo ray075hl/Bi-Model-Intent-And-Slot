@@ -52,11 +52,14 @@ def one_hot(array, Num, maxlen, device):
 def make_mask(array, Num, maxlen, device):
     batch = array.size()[0]
     res = torch.zeros(batch, maxlen, Num).to(device)
-
+    real_len = torch.zeros(batch, maxlen).to(device)
     for i in range(batch):
         for j in range(maxlen):
             if array[i, j] != 0:
                 res[i , j , :] = 1.0
+                real_len[i, j] = 1.0
 
-    return res
+    # print(real_len.sum(dim=-1))
+
+    return res, (real_len.sum(dim=-1) - 1).long()
 

@@ -4,6 +4,7 @@ from torch.autograd import Variable
 import torch.nn.functional as F
 import config as cfg
 
+
 class IntentEncoder(nn.Module):
     def __init__(self, input_size, embedding_size, hidden_size):
         super(IntentEncoder, self).__init__()
@@ -26,22 +27,30 @@ class IntentDecoder(nn.Module):
     def __init__(self, hidden_size, num_of_intent):
         super(IntentDecoder, self).__init__()
 
-        self.decoder = nn.LSTM(hidden_size*2, hidden_size, 1, batch_first=True)
-        self.classifier = nn.Linear(hidden_size, num_of_intent)
+        self.decoder = nn.LSTM(hidden_size*2, hidden_size, 1, batch_first=True, bidirectional=False)
+        self.classifier = nn.Sequential(
+                                     nn.Linear(in_features=hidden_size, out_features=hidden_size*2),
+                                     nn.ReLU(),
+                                     nn.Linear(hidden_size*2, num_of_intent),
+                                    )
 
         self.mix = nn.Linear(hidden_size*4, hidden_size*2)
         # print('hidden size: ', hidden_size)
 
-    def forward(self, hi, hs):
-
+    def forward(self, hi, hs, real_len):
+        batch = hi.size()[0]
         h = torch.cat((hi, hs), dim=-1)
         # print(h.size())
         x = self.mix(h)
         x = F.relu(x)
 
-        _, last_state = self.decoder(x)
+        hidden_state, last_state = self.decoder(x)
+        # print(last_state[0].size(), last_state[0].squeeze().size())
+        # print(hidden_state.size(), real_len.size())
+        index = torch.arange(batch).long().to(cfg.device)
 
-        logit_intent = self.classifier(last_state[0].squeeze(0))
+        state_ = hidden_state[index, real_len, :]
+        logit_intent = self.classifier(state_.squeeze())
 
         return logit_intent
 
@@ -69,8 +78,12 @@ class SlotDecoder(nn.Module):
     def __init__(self, hidden_size, num_of_slot):
         super(SlotDecoder, self).__init__()
 
-        self.decoder = nn.LSTM(hidden_size * 2, hidden_size, 1, batch_first=True)
-        self.classifier = nn.Linear(hidden_size, num_of_slot)
+        self.decoder = nn.LSTM(hidden_size * 2, hidden_size, 1, batch_first=True, bidirectional=False)
+        self.classifier = nn.Sequential(
+                                     nn.Linear(hidden_size, hidden_size*2),
+                                     nn.ReLU(),
+                                     nn.Linear(hidden_size*2, num_of_slot),
+                                    )
 
         self.mix = nn.Linear(hidden_size * 4, hidden_size * 2)
 
