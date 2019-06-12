@@ -4,8 +4,8 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 
 max_length = 60
-embedding_size = 64
-hidden_size = 64
+embedding_size = 256
+hidden_size = 256
 
 
 total_epoch = 10

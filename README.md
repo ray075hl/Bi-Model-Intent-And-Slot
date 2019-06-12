@@ -11,8 +11,12 @@ Dataset: **ATIS**.
 
 Result with decoder as paper described.
 
-2019-06-12: accuracy of intent detection is  *97.19%*  (about 10 epoch).
+2019-06-12: accuracy of intent detection is  *98.9058%*  (about 10 epoch).
+
+
 
 
 
 **In progress...**
+
+**TODO:** Calculate F1 score of slot filling. 
