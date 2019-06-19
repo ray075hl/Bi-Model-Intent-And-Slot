@@ -9,24 +9,6 @@ from config import device
 
 DROP_OUT = 0.2
 
-# class SlotFilling(nn.Module):
-
-#     def __init__(self, vocab_size=len(word2index), label_size=len(slot2index)):
-#         super(SlotFilling, self).__init__()
-#         embedding_dim = 300
-#         hidden_size = 200
-#         self.embeddding = nn.Embedding(vocab_size, embedding_dim)
-#         self.lstm = nn.LSTM(input_size=embedding_dim, hidden_size= hidden_size,\
-#                             bidirectional= True, batch_first=True)
-#         self.fc = nn.Linear(hidden_size*2, label_size)
-
-#     def forward(self, x):
-#         x = self.embeddding(x)
-#         x, _ = self.lstm(x)
-#         x = F.dropout(x, DROP_OUT)
-#         outputs = self.fc(x)
-#         return outputs
-
 
 # Bi-model 
 
@@ -51,20 +33,40 @@ class slot_enc(nn.Module):
 class slot_dec(nn.Module):
     def __init__(self, hidden_size= 200, label_size=len(slot2index)):
         super(slot_dec, self).__init__()
-        self.mix = nn.Linear(hidden_size*4, hidden_size)
-        self.lstm = nn.LSTM(input_size=hidden_size, hidden_size=hidden_size, batch_first=True, num_layers=2)
+        self.lstm = nn.LSTM(input_size=hidden_size*5, hidden_size=hidden_size, num_layers=2)
         self.fc = nn.Linear(hidden_size, label_size)
-
+        self.hidden_size = hidden_size
     def forward(self, x, hi):
+        batch = x.size(0)
+        length = x.size(1)
+        dec_init_out = torch.zeros(batch, 1, self.hidden_size).to(device)
+        hidden_state = (torch.zeros(2, 1, self.hidden_size).to(device), \
+                        torch.zeros(2, 1, self.hidden_size).to(device))
         x = torch.cat((x, hi), dim=-1)
-        x = self.mix(x)
+        x = x.transpose(1, 0) # 50 x batch x feature_size
+        
+        all_out = []
+        for i in range(length):
+            if i == 0:
+                out, hidden_state = self.lstm(torch.cat((x[i].unsqueeze(1), dec_init_out), dim=-1), hidden_state)
+            else:
+                # print('out_size: ', out.size())
+                # print('x size: ', x[i].size())
+                out, hidden_state = self.lstm(torch.cat((x[i].unsqueeze(1), out), dim=-1), hidden_state)
+            # print(out.size())
+            all_out.append(out)
+        output = torch.cat(all_out, dim=1) # 50 x batch x feature_size
 
-        x = F.tanh(x)
-
-        x, _ = self.lstm(x)
-        x = F.dropout(x, DROP_OUT)
-        res = self.fc(x)
+        print(output.size())
+        res = self.fc(output)
         return res 
+
+
+
+
+
+
+
 
 
 class intent_enc(nn.Module):
@@ -88,21 +90,15 @@ class intent_enc(nn.Module):
 class intent_dec(nn.Module):
     def __init__(self, hidden_size= 200, label_size=len(intent2index)):
         super(intent_dec, self).__init__()
-        self.mix = nn.Linear(hidden_size*4, hidden_size)
-        self.lstm = nn.LSTM(input_size=hidden_size, hidden_size=hidden_size, batch_first=True, num_layers=2)
-        # self.fc1 = nn.Linear(hidden_size, hidden_size)
-        # self.fc2 = nn.Linear(hidden_size, label_size)
+        self.lstm = nn.LSTM(input_size=hidden_size*4, hidden_size=hidden_size, batch_first=True, num_layers=2)
         self.fc = nn.Linear(hidden_size, label_size)
 
     def forward(self, x, hs, real_len):
         batch = x.size()[0]
         real_len = torch.tensor(real_len).to(device)
         x = torch.cat((x, hs), dim=-1)
-        x = self.mix(x)
 
-        x = F.tanh(x)
-
-        x, last_state = self.lstm(x)
+        x, _ = self.lstm(x)
         x= F.dropout(x, DROP_OUT)
         index = torch.arange(batch).long().to(device)
         state = x[index, real_len-1, :]

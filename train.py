@@ -52,11 +52,13 @@ for epoch in range(epoch_num):
         print(slot_label_test)
         print('*'*20)
 '''
+best_correct_num = 0
+best_epoch = -1
 for epoch in range(epoch_num):
     slot_loss_history = []
     intent_loss_history = []
     for batch_index, data in enumerate(utils.get_batch(index_train)):
-        #print(data)
+        print(batch_index)
         sentence, real_len, slot_label, intent_label = data
         mask = utils.make_mask(real_len).to(device)
         slot_optimizer.zero_grad()
@@ -97,8 +99,7 @@ for epoch in range(epoch_num):
     total_test = len(index_test)
     # print(total_test)
     correct_num = 0
-    best_correct_num = 0
-    best_epoch = -1
+
     for batch_index, data_test in enumerate(utils.get_batch(index_test, batch_size=1)):
         sentence_test, real_len_test, slot_label_test, intent_label_test = data_test
         # print(sentence[0].shape, real_len.shape, slot_label.shape)
@@ -121,10 +122,10 @@ for epoch in range(epoch_num):
         if correct_num > best_correct_num:
             best_correct_num = correct_num
             best_epoch = epoch
-    correct_num = 0
+    
     print('*'*20)
     print('Epoch: [{}/{}], Intent Val Acc: {:.4f}'.format(epoch+1, epoch_num, 100.0*correct_num/total_test))
     print('*'*20)
     
-    print('Best Intent Acc: {:.4f} at Epoch: {}'.format(best_correct_num/total_test, best_epoch))
+    print('Best Intent Acc: {:.4f} at Epoch: {}'.format(best_correct_num/total_test, best_epoch+1))
 
