@@ -1,140 +1,133 @@
-import torch
+from data import word2index, index2word, slot2index, index2slot, intent2index, index2intent
+from data import index_train, index_test
+
+import torch 
 import torch.nn as nn
-from torch.autograd import Variable
 import torch.nn.functional as F
-import config as cfg
+
+from config import device
+
+DROP_OUT = 0.2
+
+# class SlotFilling(nn.Module):
+
+#     def __init__(self, vocab_size=len(word2index), label_size=len(slot2index)):
+#         super(SlotFilling, self).__init__()
+#         embedding_dim = 300
+#         hidden_size = 200
+#         self.embeddding = nn.Embedding(vocab_size, embedding_dim)
+#         self.lstm = nn.LSTM(input_size=embedding_dim, hidden_size= hidden_size,\
+#                             bidirectional= True, batch_first=True)
+#         self.fc = nn.Linear(hidden_size*2, label_size)
+
+#     def forward(self, x):
+#         x = self.embeddding(x)
+#         x, _ = self.lstm(x)
+#         x = F.dropout(x, DROP_OUT)
+#         outputs = self.fc(x)
+#         return outputs
 
 
-class IntentEncoder(nn.Module):
-    def __init__(self, input_size, embedding_size, hidden_size):
-        super(IntentEncoder, self).__init__()
+# Bi-model 
 
-        self.hidden_size = hidden_size
-
-        self.embedding = nn.Embedding(input_size, embedding_size)
-        self.embedding.weight.data.uniform_(-0.1, 0.1)
-
-        self.lstm = nn.LSTM(embedding_size, hidden_size, 1, batch_first=True, bidirectional=True)
-
-    def forward(self, x):
-        x = self.embedding(x)
-        x, _ = self.lstm(x)
-        # print('enc :', x.size())
-        return x
-
-
-class IntentDecoder(nn.Module):
-    def __init__(self, hidden_size, num_of_intent):
-        super(IntentDecoder, self).__init__()
-
-        self.decoder = nn.LSTM(hidden_size*2, hidden_size, 1, batch_first=True, bidirectional=False)
-        self.classifier = nn.Sequential(
-                                     nn.Linear(in_features=hidden_size, out_features=hidden_size*2),
-                                     nn.ReLU(),
-                                     nn.Linear(hidden_size*2, num_of_intent),
-                                    )
-
-        self.mix = nn.Linear(hidden_size*4, hidden_size*2)
-        # print('hidden size: ', hidden_size)
-
-    def forward(self, hi, hs, real_len):
-        batch = hi.size()[0]
-        h = torch.cat((hi, hs), dim=-1)
-        # print(h.size())
-        x = self.mix(h)
-        x = F.relu(x)
-
-        hidden_state, last_state = self.decoder(x)
-        # print(last_state[0].size(), last_state[0].squeeze().size())
-        # print(hidden_state.size(), real_len.size())
-        index = torch.arange(batch).long().to(cfg.device)
-
-        state_ = hidden_state[index, real_len, :]
-        logit_intent = self.classifier(state_.squeeze())
-
-        return logit_intent
-
-
-class SlotEncoder(nn.Module):
-    def __init__(self, input_size, embedding_size, hidden_size):
-        super(SlotEncoder, self).__init__()
-
-        self.hidden_size = hidden_size
-
-        self.embedding = nn.Embedding(input_size, embedding_size)
-        self.embedding.weight.data.uniform_(-0.1, 0.1)
-
-        self.lstm = nn.LSTM(embedding_size, hidden_size, 1, batch_first=True, bidirectional=True)
+class slot_enc(nn.Module):
+    def __init__(self, vocab_size=len(word2index)):
+        super(slot_enc, self).__init__()
+        embedding = 300
+        hidden_size = 200
+        self.embedding = nn.Embedding(vocab_size, embedding).to(device)
+        # self.embedding.weight.data.uniform_(-1.0, 1.0)
+        self.lstm = nn.LSTM(input_size=embedding, hidden_size= hidden_size, num_layers=2,\
+                            bidirectional= True, batch_first=True)
 
     def forward(self, x):
         x = self.embedding(x)
+        x = F.dropout(x, DROP_OUT)
+        x, _ = self.lstm(x)
+
+        return x 
+
+
+class slot_dec(nn.Module):
+    def __init__(self, hidden_size= 200, label_size=len(slot2index)):
+        super(slot_dec, self).__init__()
+        self.mix = nn.Linear(hidden_size*4, hidden_size)
+        self.lstm = nn.LSTM(input_size=hidden_size, hidden_size=hidden_size, batch_first=True, num_layers=2)
+        self.fc = nn.Linear(hidden_size, label_size)
+
+    def forward(self, x, hi):
+        x = torch.cat((x, hi), dim=-1)
+        x = self.mix(x)
+
+        x = F.tanh(x)
+
+        x, _ = self.lstm(x)
+        x = F.dropout(x, DROP_OUT)
+        res = self.fc(x)
+        return res 
+
+
+class intent_enc(nn.Module):
+    def __init__(self, vocab_size=len(word2index)):
+        super(intent_enc, self).__init__()
+        embedding = 300
+        hidden_size = 200
+        self.embedding = nn.Embedding(vocab_size, embedding).to(device)
+        # self.embedding.weight.data.uniform_(-1.0, 1.0)
+        self.lstm = nn.LSTM(input_size=embedding, hidden_size= hidden_size, num_layers=2,\
+                            bidirectional= True, batch_first=True)
+    
+    def forward(self, x):
+        x = self.embedding(x)
+        x = F.dropout(x, DROP_OUT)
         x, _ = self.lstm(x)
 
         return x
 
 
+class intent_dec(nn.Module):
+    def __init__(self, hidden_size= 200, label_size=len(intent2index)):
+        super(intent_dec, self).__init__()
+        self.mix = nn.Linear(hidden_size*4, hidden_size)
+        self.lstm = nn.LSTM(input_size=hidden_size, hidden_size=hidden_size, batch_first=True, num_layers=2)
+        # self.fc1 = nn.Linear(hidden_size, hidden_size)
+        # self.fc2 = nn.Linear(hidden_size, label_size)
+        self.fc = nn.Linear(hidden_size, label_size)
 
-class SlotDecoder(nn.Module):
-    def __init__(self, hidden_size, num_of_slot):
-        super(SlotDecoder, self).__init__()
+    def forward(self, x, hs, real_len):
+        batch = x.size()[0]
+        real_len = torch.tensor(real_len).to(device)
+        x = torch.cat((x, hs), dim=-1)
+        x = self.mix(x)
 
-        self.decoder = nn.LSTM(hidden_size * 2, hidden_size, 1, batch_first=True, bidirectional=False)
-        self.classifier = nn.Sequential(
-                                     nn.Linear(hidden_size, hidden_size*2),
-                                     nn.ReLU(),
-                                     nn.Linear(hidden_size*2, num_of_slot),
-                                    )
+        x = F.tanh(x)
 
-        self.mix = nn.Linear(hidden_size * 4, hidden_size * 2)
-
-    def forward(self, hs, hi):
-
-        h = torch.cat((hs, hi), dim=-1)
-        x = self.mix(h)
-        x = F.relu(x)
-
-        slot_hidden, _ = self.decoder(x)
-        logit_slot = self.classifier(slot_hidden)
-
-        return logit_slot
-
-
-class JointModel(nn.Module):
-    def __init__(self, input_size, embedding_size, hidden_size, num_of_intent, num_of_slot, maxlen, batch_size):
-        super(JointModel, self).__init__()
-
-        self.intent_enc = IntentEncoder(input_size, embedding_size, hidden_size)
-        self.intent_dec = IntentDecoder(hidden_size, num_of_intent)
-
-        self.slot_enc = SlotEncoder(input_size, embedding_size, hidden_size)
-        self.slot_dec = SlotDecoder(hidden_size, num_of_slot)
-
-        self.intent_share_hidden = torch.zeros(batch_size, maxlen, hidden_size*2).to(cfg.device)
-        self.slot_share_hidden = torch.zeros(batch_size, maxlen, hidden_size*2).to(cfg.device)
-
-    def forward(self, x):
-        pass
-
-    # def forward(self, x):
-    #
-    #
-    #
-    #     # xi = self.intent_enc(x)
-    #     # if self.slot_share_hidden is None:
-    #     #     logit_intent = self.intent_dec(xi, xi)
-    #     # else:
-    #     #     logit_intent = self.intent_dec(xi, self.slot_share_hidden)
-    #     #
-    #     # xs = self.slot_enc(x)
-    #     # if self.intent_share_hidden is None:
-    #     #     logit_slot = self.slot_dec(xs, xs)
-    #     # else:
-    #     #     logit_slot = self.slot_dec(xs, self.intent_share_hidden)
-    #     #
-    #     # self.slot_share_hidden = xs.clone()
-    #     # self.intent_share_hidden = xi.clone()
-    #     #
-    #     # return logit_intent, logit_slot
+        x, last_state = self.lstm(x)
+        x= F.dropout(x, DROP_OUT)
+        index = torch.arange(batch).long().to(device)
+        state = x[index, real_len-1, :]
+        
+        res = self.fc(state.squeeze())
+        return res
+        
+        # res = self.fc1(last_state[0])
+        # res = F.relu(res)
+        # res = self.fc2(res)
+        # return res 
 
 
+class Intent(nn.Module):
+    def __init__(self):
+        super(Intent, self).__init__()
+        self.enc = intent_enc().to(device)
+        self.dec = intent_dec().to(device)
+        self.share_memory = torch.zeros(16, 50, 400).to(device)
+    
+
+class Slot(nn.Module):
+    def __init__(self):
+        super(Slot, self).__init__()
+        self.enc = slot_enc().to(device)
+        self.dec = slot_dec().to(device)
+        self.share_memory = torch.zeros(16, 50, 400).to(device)
 

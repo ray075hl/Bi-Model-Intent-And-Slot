@@ -1,112 +1,130 @@
-import torch.optim as optim
-
-from data import *
 from model import *
-import config as cfg
+ 
+
+from torch import optim
+import numpy as np
+import torch
+
 import utils
 
+from config import device
 
-DEBUG = False
+epoch_num = 50
 
-train_data, word2index, tag2index, intent2index = preprocessing('./data/atis.train.w-intent.iob', cfg.max_length)
-val_data, _, _, _ = preprocessing('./data/atis.test.w-intent.iob', cfg.max_length)
+slot_model = Slot().to(device)
+intent_model = Intent().to(device)
 
+slot_optimizer = optim.Adam(slot_model.parameters(), lr=0.001)
+intent_optimizer = optim.Adam(intent_model.parameters(), lr=0.001)
 
-if DEBUG:
-    print(len(train_data))
-    print(len(word2index))
-    print(len(tag2index))
-    print(intent2index)
-
-
-my_model = JointModel(len(word2index), cfg.embedding_size,
-                      cfg.hidden_size, len(intent2index), len(tag2index),
-                      cfg.max_length, cfg.batch_size).to(cfg.device)
-
-IntentLoss = nn.CrossEntropyLoss()
-SlotLoss = nn.CrossEntropyLoss()
-
-optim_intent = optim.Adam(my_model.parameters(), lr=cfg.learning_rate)
-optim_slot = optim.Adam(my_model.parameters(), lr=cfg.learning_rate)
-
-
-for epoch in range(cfg.total_epoch):
-    # losses = []
-    my_model.train()
-    for i, batch in enumerate(getBatch(cfg.batch_size, train_data)):
-
-        # ----------------------------- papare data -------------------------
-        x, y_1, y_2 = zip(*batch)   # sentence, slot label, intent label
-
-        x = torch.cat(x)
-        tag_target = torch.cat(y_1)
-
-        slot_mask, real_len = utils.make_mask(tag_target, len(tag2index), cfg.max_length, cfg.device)
-
-        intent_target = torch.cat(y_2)
-        tag_target = utils.one_hot(tag_target, len(tag2index), cfg.max_length, cfg.device)
-        intent_target = utils.one_hot(intent_target, len(intent2index), cfg.max_length, cfg.device)
-
-        # ----------------------------- compute graph ------------------------
-
-        # Asynchronous training 1
-        hs = my_model.slot_enc(x)
-        my_model.slot_share_hidden = hs.clone()
-        slot_logits = my_model.slot_dec(hs, my_model.intent_share_hidden.detach())
-        # print(slot_logits.size())
-
-        slot_loss = -1.0 * torch.sum(utils.masked_log_softmax(slot_logits, slot_mask, dim=-1) * tag_target) #/ len(tag2index)
-
-        my_model.zero_grad()
+'''
+# index_train = np.array(index_train)
+print(len(index_train))
+for epoch in range(epoch_num):
+    for batch_index, data in enumerate(utils.get_batch(index_train)):
+        #print(data)
+        sentence, real_len, slot_label, intent_label = data
+        mask = utils.make_mask(real_len)
+        optimizer.zero_grad()
+        # print(sentence[0].shape, real_len.shape, slot_label.shape)
+        x = torch.tensor(sentence)
+        y = torch.tensor(slot_label)
+        y = utils.one_hot(y)
+        # print(x.size(), y.size())
+        logits = my_model(x)
+        log_logits = utils.masked_log_softmax(logits, mask, dim=-1)
+        loss = -1.0*torch.sum(y*log_logits)
+        loss.backward()
+        optimizer.step()
+        if batch_index % 100 == 0:
+            print(loss.item())
+    
+    # evaluation
+    for batch_index, data_test in enumerate(utils.get_batch(index_test, batch_size=1)):
+        sentence_test, real_len_test, slot_label_test, intent_label_test = data_test
+        # print(sentence[0].shape, real_len.shape, slot_label.shape)
+        x_test = torch.tensor(sentence_test)
+        mask_test = utils.make_mask(real_len_test, batch=1)
+        logits_test = my_model(x_test)
+        res = torch.argmax(utils.masked_log_softmax(logits_test, mask_test), -1)
+        print('*'*20)
+        print(res)
+        print(slot_label_test)
+        print('*'*20)
+'''
+for epoch in range(epoch_num):
+    slot_loss_history = []
+    intent_loss_history = []
+    for batch_index, data in enumerate(utils.get_batch(index_train)):
+        #print(data)
+        sentence, real_len, slot_label, intent_label = data
+        mask = utils.make_mask(real_len).to(device)
+        slot_optimizer.zero_grad()
+        # print(sentence[0].shape, real_len.shape, slot_label.shape)
+        x = torch.tensor(sentence).to(device)
+        y_slot = torch.tensor(slot_label).to(device)
+        y_slot = utils.one_hot(y_slot).to(device)
+        y_intent = torch.tensor(intent_label).to(device)
+        y_intent = utils.one_hot(y_intent, Num=23).to(device)
+        # print(x.size(), y.size())
+        hs = slot_model.enc(x)
+        slot_model.share_memory = hs.clone()
+        slot_logits = slot_model.dec(hs, intent_model.share_memory.detach())
+        log_slot_logits = utils.masked_log_softmax(slot_logits, mask, dim=-1)
+        slot_loss = -1.0*torch.sum(y_slot*log_slot_logits)
+        slot_loss_history.append(slot_loss.item())
         slot_loss.backward()
-        torch.nn.utils.clip_grad_norm_(my_model.parameters(), 5.0)
-        optim_slot.step()
+        torch.nn.utils.clip_grad_norm_(slot_model.parameters(), 5.0)
+        slot_optimizer.step()
 
-        # Asynchronous training 2
-        hi = my_model.intent_enc(x)
-        my_model.intent_share_hidden = hi.clone()
-        intent_logits = my_model.intent_dec(hi, my_model.slot_share_hidden.detach(), real_len)
-        # print(intent_logits.size())
-        # print(torch.argmax(F.softmax(intent_logits), dim=-1))
-        intent_loss = -1.0 * torch.sum(F.log_softmax(intent_logits, dim=-1) * intent_target) # / len(intent2index)
-
-        my_model.zero_grad()
+        ##############################################
+        intent_optimizer.zero_grad()
+        hi = intent_model.enc(x)
+        intent_model.share_memory = hi.clone()
+        intent_logits = intent_model.dec(hi, slot_model.share_memory.detach(), real_len)
+        log_intent_logits = F.log_softmax(intent_logits, dim=-1)
+        intent_loss = -1.0*torch.sum(y_intent*log_intent_logits)
+        intent_loss_history.append(intent_loss.item())
         intent_loss.backward()
-        torch.nn.utils.clip_grad_norm_(my_model.parameters(), 1.0)
-        optim_intent.step()
+        torch.nn.utils.clip_grad_norm_(intent_model.parameters(), 5.0)
+        intent_optimizer.step()
 
-        # print(intent_loss.item(), slot_loss.item())
+        if batch_index % 100 == 0 and batch_index > 0:
+            print('Slot loss: {:.4f} \t Intent loss: {:.4f}'.format(sum(slot_loss_history[-100:])/100.0, \
+                sum(intent_loss_history[-100:])/100.0))
 
-    # Evaluation of intent detection
-    my_model.eval()
-    total_val_num = len(val_data)
+    # evaluation
+    total_test = len(index_test)
+    # print(total_test)
     correct_num = 0
-    for i, batch in enumerate(getBatch_val(val_data)):
+    best_correct_num = 0
+    best_epoch = -1
+    for batch_index, data_test in enumerate(utils.get_batch(index_test, batch_size=1)):
+        sentence_test, real_len_test, slot_label_test, intent_label_test = data_test
+        # print(sentence[0].shape, real_len.shape, slot_label.shape)
+        x_test = torch.tensor(sentence_test).to(device)
 
-        # ----------------------------- papare data -------------------------
-        x, y_1, y_2 = zip(*batch)   # sentence, slot label, intent label
+        # slot model to generate hs
+        hs_test = slot_model.enc(x_test)
 
-        x = torch.cat(x)
-        tag_target = torch.cat(y_1)
-
-        slot_mask, real_len = utils.make_mask(tag_target, len(tag2index), cfg.max_length, cfg.device)
-
-        intent_target = torch.cat(y_2)
-        tag_target = utils.one_hot(tag_target, len(tag2index), cfg.max_length, cfg.device)
-        intent_target = utils.one_hot(intent_target, len(intent2index), cfg.max_length, cfg.device)
-
-        # ----------------calc hidden state of slot filling-------------
-        hs = my_model.slot_enc(x)
-        # ----------------calc hidden state of slot filling-------------
-
-        hi = my_model.intent_enc(x)
-        intent_logits = my_model.intent_dec(hi, hs, real_len)
-
-        result = torch.argmax(F.log_softmax(intent_logits, dim=-1), dim=-1)
-        for i in range(x.size()[0]):
-            if result[i].data == y_2[i][0]:
-                correct_num += 1
-
-    print('Epoch: {} \t Validation accuracy of intent detection: {:.4f}%'
-          .format(epoch, 100.0*correct_num/total_val_num))
+        mask_test = utils.make_mask(real_len_test, batch=1).to(device)
+        hi_test = intent_model.enc(x_test)
+        # intent_logits_test = intent_model.dec(hi_test, torch.zeros(1, 50, 400).to(device), real_len_test)
+        intent_logits_test = intent_model.dec(hi_test, hs_test, real_len_test)
+        log_intent_logits_test = F.log_softmax(intent_logits_test, dim=-1)
+        res_test = torch.argmax(log_intent_logits_test, dim=-1)
+        
+        # print(res_test)
+        # print(intent_label_test)
+        if res_test.item() == intent_label_test[0]:
+            correct_num += 1
+        if correct_num > best_correct_num:
+            best_correct_num = correct_num
+            best_epoch = epoch
+    correct_num = 0
+    print('*'*20)
+    print('Epoch: [{}/{}], Intent Val Acc: {:.4f}'.format(epoch+1, epoch_num, 100.0*correct_num/total_test))
+    print('*'*20)
+    
+    print('Best Intent Acc: {:.4f} at Epoch: {}'.format(best_correct_num/total_test, best_epoch))
 

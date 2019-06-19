@@ -1,72 +1,57 @@
-import torch
-from torch.autograd import Variable
-import pickle
-import random
-import os
+import numpy as np
 
-USE_CUDA = torch.cuda.is_available()
+# convert an empty 2D list into an empty 1D list
 flatten = lambda l: [item for sublist in l for item in sublist]
 
+index_seq2slot = lambda s, index2slot: [index2slot[i] for i in s]
+index_seq2word = lambda s, index2word: [index2word[i] for i in s]
 
-def prepare_sequence(seq, to_ix):
-    idxs = list(map(lambda w: to_ix[w] if w in to_ix.keys() else to_ix["<UNK>"], seq))
-    tensor = Variable(torch.LongTensor(idxs)).cuda() if USE_CUDA else Variable(torch.LongTensor(idxs))
-    return tensor
+train_data = open("dataset/atis.train.w-intent.iob", "r").readlines()
+test_data = open("dataset/atis.test.w-intent.iob", "r").readlines()
 
+print('This is the first line of data:')
 
-def preprocessing(file_path, length):
-    """
-    atis-2.train.w-intent.iob
-    """
-    processed_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data/")
-    print("processed_data_path : %s" % processed_path)
+print(train_data[0])
 
-    if os.path.exists(os.path.join(processed_path, "processed_train_data.pkl")):
-        train_data, word2index, tag2index, intent2index = pickle.load(open(os.path.join(processed_path,
-                                                                                        "processed_train_data.pkl"),
-                                                                           "rb"))
-        return train_data, word2index, tag2index, intent2index
-
-    if not os.path.exists(processed_path):
-        os.makedirs(processed_path)
-
-    try:
-        train = open(file_path, "r").readlines()
-        print("Successfully load data. # of set : %d " % len(train))
-    except:
-        print("No such file!")
-        return None, None, None, None
-
-    try:
-        train = [t[:-1] for t in train]
-        train = [[t.split("\t")[0].split(" "), t.split("\t")[1].split(" ")[:-1], t.split("\t")[1].split(" ")[-1]] for t
-                 in train]
-        train = [[t[0][1:-1], t[1][1:], t[2]] for t in train]
-
-        seq_in, seq_out, intent = list(zip(*train))
-        vocab = set(flatten(seq_in))
-        slot_tag = set(flatten(seq_out))
-        intent_tag = set(intent)
-        print("# of vocab : {vocab}, # of slot_tag : {slot_tag}, # of intent_tag : {intent_tag}"
-              .format(vocab=len(vocab), slot_tag=len(slot_tag), intent_tag=len(intent_tag)))
-    except:
-        return None, None, None, None
-
+def data_pipeline(data, length=50):
+    '''
+    [length] represents the standard size of the sequence to be inputed in the model
+    This function will make sure that every line from the data has the same length
+    before it is fed in the model
+    '''
+    # remove the '\n' spaces
+    data = [t[:-1] for t in data]
+    
+    # split the data by white spaces
+    data = [[t.split("\t")[0].split(" "), t.split("\t")[1].split(" ")[:-1], t.split("\t")[1].split(" ")[-1]] for t in
+            data]  
+    
+    # transform every line into a dictionary: [ORIGINAL data, LABELED data, and INTEND]
+    data = [[t[0][1:-1], t[1][1:], t[2]] for t in data]
+    seq_in, seq_out, intent = list(zip(*data))
+    
     sin = []
     sout = []
-
-    for i in range(len(seq_in)):
-        temp = seq_in[i]
+    
+    # iterate through every line of the original seq
+    for line in range(len(seq_in)):
+        ### A D J U S T   T H E   S I Z E   O F   T H E   O R I G I N A L   S E Q U E N C E ###
+        temp = seq_in[line]
+        # if the line being read is shorter than 'length', this will apply padding to fill it
         if len(temp) < length:
+            # <EOS> = End of Sentence
             temp.append('<EOS>')
             while len(temp) < length:
                 temp.append('<PAD>')
+        
+        # if the line being read is larger than 'length', this will cut it to adjust its size
         else:
             temp = temp[:length]
             temp[-1] = '<EOS>'
         sin.append(temp)
-
-        temp = seq_out[i]
+        
+        ### A D J U S T   T H E   S I Z E   O F   T H E   L A B E L E D   S E Q U E N C E ###
+        temp = seq_out[line]
         if len(temp) < length:
             while len(temp) < length:
                 temp.append('<PAD>')
@@ -74,78 +59,71 @@ def preprocessing(file_path, length):
             temp = temp[:length]
             temp[-1] = '<EOS>'
         sout.append(temp)
+        data = list(zip(sin, sout, intent))
+        
+    return data
 
+# transform the data so every sequence has the same size/legth
+train_data_ed = data_pipeline(train_data)
+test_data_ed = data_pipeline(test_data)
+
+print(train_data_ed[0])
+
+def get_info_from_training_data(data):
+    seq_in, seq_out, intent = list(zip(*data))
+    vocab = set(flatten(seq_in))
+    slot_tag = set(flatten(seq_out))
+    intent_tag = set(intent)
+    
+    # generate word2index
     word2index = {'<PAD>': 0, '<UNK>': 1, '<SOS>': 2, '<EOS>': 3}
     for token in vocab:
         if token not in word2index.keys():
             word2index[token] = len(word2index)
 
-    tag2index = {'<PAD>': 0}
+    # generate index2word
+    index2word = {v: k for k, v in word2index.items()}
+
+    # generate tag2index
+    tag2index = {'<PAD>': 0, '<UNK>': 1, "O": 2}
     for tag in slot_tag:
         if tag not in tag2index.keys():
             tag2index[tag] = len(tag2index)
 
-    intent2index = {}
+    # generate index2tag
+    index2tag = {v: k for k, v in tag2index.items()}
+
+    # generate intent2index
+    intent2index = {'<UNK>': 0}
     for ii in intent_tag:
         if ii not in intent2index.keys():
             intent2index[ii] = len(intent2index)
 
-    train = list(zip(sin, sout, intent))
-
-    train_data = []
-
-    for tr in train:
-        temp = prepare_sequence(tr[0], word2index)
-        temp = temp.view(1, -1)
-
-        temp2 = prepare_sequence(tr[1], tag2index)
-        temp2 = temp2.view(1, -1)
-
-        temp3 = Variable(torch.LongTensor([intent2index[tr[2]]])).cuda() if USE_CUDA else Variable(
-            torch.LongTensor([intent2index[tr[2]]]))
-
-        train_data.append((temp, temp2, temp3))
-
-    pickle.dump((train_data, word2index, tag2index, intent2index),
-                open(os.path.join(processed_path, "processed_train_data.pkl"), "wb"))
-    pickle
-    print("Preprocessing complete!")
-
-    return train_data, word2index, tag2index, intent2index
+    # generate index2intent
+    index2intent = {v: k for k, v in intent2index.items()}
+    return word2index, index2word, tag2index, index2tag, intent2index, index2intent
 
 
-def getBatch(batch_size, train_data):
-    random.shuffle(train_data)
-    sindex = 0
-    eindex = batch_size
-    while eindex < len(train_data):
-        batch = train_data[sindex:eindex]
-        temp = eindex
-        eindex = eindex + batch_size
-        sindex = temp
+word2index, index2word, slot2index, index2slot, intent2index, index2intent = \
+        get_info_from_training_data(train_data_ed)
 
-        yield batch
+print(len(word2index))
+print(len(index2word))
+print(len(slot2index))
+print(len(intent2index))
 
+def to_index(train, word2index, slot2index, intent2index):
+    new_train = []
+    for sin, sout, intent in train:
+        sin_ix = list(map(lambda i: word2index[i] if i in word2index else word2index["<UNK>"],
+                          sin))
+        true_length = sin.index("<EOS>")
+        sout_ix = list(map(lambda i: slot2index[i] if i in slot2index else slot2index["<UNK>"],
+                           sout))
+        intent_ix = intent2index[intent] if intent in intent2index else intent2index["<UNK>"]
+        new_train.append([sin_ix, true_length, sout_ix, intent_ix])
+    return new_train
 
-def getBatch_val(train_data):
-    batch_size = 16
-    sindex = 0
-    while sindex < len(train_data):
-        batch = train_data[sindex:sindex+batch_size]
-        sindex = sindex + batch_size
-
-        yield batch
-
-
-def load_dictionary():
-    processed_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data/")
-
-    if os.path.exists(os.path.join(processed_path, "processed_train_data.pkl")):
-        _, word2index, tag2index, intent2index \
-            = pickle.load(open(os.path.join(processed_path, "processed_train_data.pkl"), "rb"))
-        return word2index, tag2index, intent2index
-    else:
-        print("Please, preprocess data first")
-        return None, None, None
-
+index_train = to_index(train_data_ed, word2index, slot2index, intent2index)
+index_test = to_index(test_data_ed, word2index, slot2index, intent2index)
 
