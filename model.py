@@ -1,39 +1,39 @@
-from data import word2index, index2word, slot2index, index2slot, intent2index, index2intent
-from data import index_train, index_test
-
+# from data import word2index, index2word, slot2index, index2slot, intent2index, index2intent
+# from data import index_train, index_test
+#from data_processing import train_word2index, train_slot2index, train_intent2index
+from data_iob import word_vocab, intent_vocab, slots_vocab
 import torch 
 import torch.nn as nn
 import torch.nn.functional as F
 
 from config import device
 
-DROP_OUT = 0.2
+DROPOUT = 0.2
 
-
+print('xxxxx: ', len(word_vocab))
 # Bi-model 
-
 class slot_enc(nn.Module):
-    def __init__(self, vocab_size=len(word2index)):
+    def __init__(self, vocab_size=len(word_vocab)):
         super(slot_enc, self).__init__()
         embedding = 300
         hidden_size = 200
         self.embedding = nn.Embedding(vocab_size, embedding).to(device)
         # self.embedding.weight.data.uniform_(-1.0, 1.0)
         self.lstm = nn.LSTM(input_size=embedding, hidden_size= hidden_size, num_layers=2,\
-                            bidirectional= True, batch_first=True)
+                            bidirectional= True, batch_first=True, dropout=DROPOUT)
 
     def forward(self, x):
         x = self.embedding(x)
-        x = F.dropout(x, DROP_OUT)
+        # x = F.dropout(x, DROPOUT)
         x, _ = self.lstm(x)
 
         return x 
 
 
 class slot_dec(nn.Module):
-    def __init__(self, hidden_size= 200, label_size=len(slot2index)):
+    def __init__(self, hidden_size= 200, label_size=len(slots_vocab)):
         super(slot_dec, self).__init__()
-        self.lstm = nn.LSTM(input_size=hidden_size*5, hidden_size=hidden_size, num_layers=2)
+        self.lstm = nn.LSTM(input_size=hidden_size*5, hidden_size=hidden_size, num_layers=2, dropout=DROPOUT)
         self.fc = nn.Linear(hidden_size, label_size)
         self.hidden_size = hidden_size
     def forward(self, x, hi):
@@ -50,47 +50,37 @@ class slot_dec(nn.Module):
             if i == 0:
                 out, hidden_state = self.lstm(torch.cat((x[i].unsqueeze(1), dec_init_out), dim=-1), hidden_state)
             else:
-                # print('out_size: ', out.size())
-                # print('x size: ', x[i].size())
                 out, hidden_state = self.lstm(torch.cat((x[i].unsqueeze(1), out), dim=-1), hidden_state)
-            # print(out.size())
             all_out.append(out)
         output = torch.cat(all_out, dim=1) # 50 x batch x feature_size
 
-        print(output.size())
         res = self.fc(output)
         return res 
 
 
 
-
-
-
-
-
-
 class intent_enc(nn.Module):
-    def __init__(self, vocab_size=len(word2index)):
+    def __init__(self, vocab_size=len(word_vocab)):
         super(intent_enc, self).__init__()
         embedding = 300
         hidden_size = 200
         self.embedding = nn.Embedding(vocab_size, embedding).to(device)
         # self.embedding.weight.data.uniform_(-1.0, 1.0)
         self.lstm = nn.LSTM(input_size=embedding, hidden_size= hidden_size, num_layers=2,\
-                            bidirectional= True, batch_first=True)
+                            bidirectional= True, batch_first=True, dropout=DROPOUT)
     
     def forward(self, x):
         x = self.embedding(x)
-        x = F.dropout(x, DROP_OUT)
+        # x = F.dropout(x, DROPOUT)
         x, _ = self.lstm(x)
 
         return x
 
 
 class intent_dec(nn.Module):
-    def __init__(self, hidden_size= 200, label_size=len(intent2index)):
+    def __init__(self, hidden_size= 200, label_size=len(intent_vocab)):
         super(intent_dec, self).__init__()
-        self.lstm = nn.LSTM(input_size=hidden_size*4, hidden_size=hidden_size, batch_first=True, num_layers=2)
+        self.lstm = nn.LSTM(input_size=hidden_size*4, hidden_size=hidden_size, batch_first=True, num_layers=2, dropout=DROPOUT)
         self.fc = nn.Linear(hidden_size, label_size)
 
     def forward(self, x, hs, real_len):
@@ -99,17 +89,13 @@ class intent_dec(nn.Module):
         x = torch.cat((x, hs), dim=-1)
 
         x, _ = self.lstm(x)
-        x= F.dropout(x, DROP_OUT)
+        
         index = torch.arange(batch).long().to(device)
         state = x[index, real_len-1, :]
         
         res = self.fc(state.squeeze())
         return res
         
-        # res = self.fc1(last_state[0])
-        # res = F.relu(res)
-        # res = self.fc2(res)
-        # return res 
 
 
 class Intent(nn.Module):
@@ -126,4 +112,5 @@ class Slot(nn.Module):
         self.enc = slot_enc().to(device)
         self.dec = slot_dec().to(device)
         self.share_memory = torch.zeros(16, 50, 400).to(device)
-
+		
+		

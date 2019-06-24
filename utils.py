@@ -2,7 +2,7 @@ import torch
 import numpy as np
 
 
-def make_mask(real_len, max_len=50, label_size=123, batch=16):
+def make_mask(real_len, max_len=50, label_size=127, batch=16):
     mask = torch.zeros(batch, max_len, label_size)
     for index, item in enumerate(real_len):
         mask[index, :item, :] = 1.0
@@ -19,7 +19,7 @@ def masked_log_softmax(vector: torch.Tensor, mask: torch.Tensor, dim: int = -1) 
     return torch.nn.functional.log_softmax(vector, dim=dim)
 
 
-def one_hot(array, Num=123, maxlen=50):
+def one_hot(array, Num=127, maxlen=50):
 
     shape = array.size()
     batch = shape[0]
@@ -31,39 +31,16 @@ def one_hot(array, Num=123, maxlen=50):
         res = torch.zeros(batch, maxlen, Num)
         for i in range(batch):
             for j in range(maxlen):
-                res[i][j][array[i, j]] = 1
+                if array[i, j] == Num:
+                    pass
+                else:
+                    res[i][j][array[i, j]] = 1
 
     return res
 
 import random
 
 def get_batch(data, batch_size=16):
-    total_num = len(data)
-    i = 0
-    while i < total_num//batch_size:
-        sentence = []
-        real_len = []
-        slot_label = []
-        intent_label = []
-        if batch_size == 1:
-            sentence.append(data[i][0])
-            real_len.append(data[i][1])
-            slot_label.append(data[i][2])
-            intent_label.append(data[i][3])
-        else:
-            index = np.random.choice(total_num, batch_size)
-            # print('index: ', index)
-            for m in index:
-
-                sentence.append(data[m][0])
-                real_len.append(data[m][1])
-                slot_label.append(data[m][2])
-                intent_label.append(data[m][3])
-
-        i += 1
-        yield (sentence, real_len, slot_label, intent_label)
-
-def getBatch(data, batch_size):
     random.shuffle(data)
     sindex = 0
     eindex = batch_size
@@ -85,5 +62,5 @@ def getBatch(data, batch_size):
         eindex = eindex + batch_size
         sindex = temp
 
-        yield batch
+        yield (sentence, real_len, slot_label, intent_label)
 
