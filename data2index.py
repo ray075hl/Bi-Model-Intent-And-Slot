@@ -25,8 +25,6 @@ with open('atis-2.train+dev.w-intent.iob') as f:
             sample_slot.append(slot_dict[slot])
 
         if '#' in line[-1]:
-            #for item in line[-1].split('#'):
-            #intent.append(item)
             train_intent = intent_dict[line[-1].split('#')[0]]
         else:
             train_intent = intent_dict[line[-1]]
@@ -49,14 +47,15 @@ with open('atis.test.w-intent.iob') as f:
                 index = i
                 real_length = index
                 break
-            sample_sentence.append(word_dict[word])
+            if word in word_dict:
+                sample_sentence.append(word_dict[word])
+            else:
+                sample_sentence.append(word_dict['UNK'])
 
         for slot in line[index+1:-1]:
             sample_slot.append(slot_dict[slot])
 
         if '#' in line[-1]:
-            #for item in line[-1].split('#'):
-            #intent.append(item)
             test_intent = intent_dict[line[-1].split('#')[0]]
         else:
             test_intent = intent_dict[line[-1]]

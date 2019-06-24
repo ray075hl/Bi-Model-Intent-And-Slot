@@ -24,9 +24,9 @@ for epoch in range(epoch_num):
     slot_loss_history = []
     intent_loss_history = []
     for batch_index, data in enumerate(utils.get_batch(train_data)):
-        print(batch_index)
+        # print(batch_index)
         sentence, real_len, slot_label, intent_label = data
-        #print(sentence)
+        # print(sentence)
         mask = utils.make_mask(real_len).to(device)
         slot_optimizer.zero_grad()
         # print(sentence[0].shape, real_len.shape, slot_label.shape)
@@ -82,8 +82,7 @@ for epoch in range(epoch_num):
         log_intent_logits_test = F.log_softmax(intent_logits_test, dim=-1)
         res_test = torch.argmax(log_intent_logits_test, dim=-1)
         
-        # print(res_test)
-        # print(intent_label_test)
+
         if res_test.item() == intent_label_test[0]:
             correct_num += 1
         if correct_num > best_correct_num:

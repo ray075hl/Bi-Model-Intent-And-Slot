@@ -32,7 +32,7 @@ with open('atis.test.w-intent.iob') as f:
             if word == 'eos':
                 index = i
                 break
-            words.append(word)
+            # words.append(word)
         
         for slot in line[index+1:-1]:
             slots.append(slot)
@@ -56,6 +56,7 @@ intent_dict = {}
 slot_dict = {}
 for i, key in enumerate(word_vocab):
     word_dict[key] = i
+word_dict['UNK'] = len(word_dict)-1
 word_dict['PAD'] = len(word_dict)-1
 for i, key in enumerate(intent_vocab):
     intent_dict[key] = i
@@ -64,3 +65,4 @@ for i, key in enumerate(slots_vocab):
     slot_dict[key] = i
 
 print(slot_dict)
+
