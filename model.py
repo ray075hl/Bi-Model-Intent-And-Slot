@@ -1,19 +1,19 @@
 # from data import word2index, index2word, slot2index, index2slot, intent2index, index2intent
 # from data import index_train, index_test
 #from data_processing import train_word2index, train_slot2index, train_intent2index
-from data_iob import word_vocab, intent_vocab, slots_vocab
+from make_dict import word_dict, intent_dict, slot_dict
 import torch 
 import torch.nn as nn
 import torch.nn.functional as F
 
 from config import device
 
-DROPOUT = 0.2
+DROPOUT = 0.1
 
-print('xxxxx: ', len(word_vocab))
+print('xxxxx: ', len(word_dict))
 # Bi-model 
 class slot_enc(nn.Module):
-    def __init__(self, vocab_size=len(word_vocab)):
+    def __init__(self, vocab_size=len(word_dict)):
         super(slot_enc, self).__init__()
         embedding = 300
         hidden_size = 200
@@ -24,26 +24,28 @@ class slot_enc(nn.Module):
 
     def forward(self, x):
         x = self.embedding(x)
-        # x = F.dropout(x, DROPOUT)
+        # x = F.dropout(x , DROPOUT)
         x, _ = self.lstm(x)
-
+        
         return x 
 
 
 class slot_dec(nn.Module):
-    def __init__(self, hidden_size= 200, label_size=len(slots_vocab)):
+    def __init__(self, hidden_size= 200, label_size=len(slot_dict)):
         super(slot_dec, self).__init__()
-        self.lstm = nn.LSTM(input_size=hidden_size*5, hidden_size=hidden_size, num_layers=2, dropout=DROPOUT)
+        self.lstm = nn.LSTM(input_size=hidden_size*5, hidden_size=hidden_size, num_layers=1, dropout=DROPOUT)
         self.fc = nn.Linear(hidden_size, label_size)
         self.hidden_size = hidden_size
+
     def forward(self, x, hi):
         batch = x.size(0)
         length = x.size(1)
         dec_init_out = torch.zeros(batch, 1, self.hidden_size).to(device)
-        hidden_state = (torch.zeros(2, 1, self.hidden_size).to(device), \
-                        torch.zeros(2, 1, self.hidden_size).to(device))
+        hidden_state = (torch.zeros(1, 1, self.hidden_size).to(device), \
+                        torch.zeros(1, 1, self.hidden_size).to(device))
         x = torch.cat((x, hi), dim=-1)
-        x = x.transpose(1, 0) # 50 x batch x feature_size
+
+        x = x.transpose(1, 0)  # 50 x batch x feature_size
         
         all_out = []
         for i in range(length):
@@ -53,14 +55,14 @@ class slot_dec(nn.Module):
                 out, hidden_state = self.lstm(torch.cat((x[i].unsqueeze(1), out), dim=-1), hidden_state)
             all_out.append(out)
         output = torch.cat(all_out, dim=1) # 50 x batch x feature_size
-
+        
         res = self.fc(output)
         return res 
 
 
 
 class intent_enc(nn.Module):
-    def __init__(self, vocab_size=len(word_vocab)):
+    def __init__(self, vocab_size=len(word_dict)):
         super(intent_enc, self).__init__()
         embedding = 300
         hidden_size = 200
@@ -73,16 +75,16 @@ class intent_enc(nn.Module):
         x = self.embedding(x)
         # x = F.dropout(x, DROPOUT)
         x, _ = self.lstm(x)
-
+        
         return x
 
 
 class intent_dec(nn.Module):
-    def __init__(self, hidden_size= 200, label_size=len(intent_vocab)):
+    def __init__(self, hidden_size= 200, label_size=len(intent_dict)):
         super(intent_dec, self).__init__()
-        self.lstm = nn.LSTM(input_size=hidden_size*4, hidden_size=hidden_size, batch_first=True, num_layers=2, dropout=DROPOUT)
+        self.lstm = nn.LSTM(input_size=hidden_size*4, hidden_size=hidden_size, batch_first=True, num_layers=1, dropout=DROPOUT)
         self.fc = nn.Linear(hidden_size, label_size)
-
+        
     def forward(self, x, hs, real_len):
         batch = x.size()[0]
         real_len = torch.tensor(real_len).to(device)
@@ -90,6 +92,7 @@ class intent_dec(nn.Module):
 
         x, _ = self.lstm(x)
         
+
         index = torch.arange(batch).long().to(device)
         state = x[index, real_len-1, :]
         
