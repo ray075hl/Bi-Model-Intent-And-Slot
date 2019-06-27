@@ -17,11 +17,13 @@ intent_model = Intent().to(device)
 print(slot_model)
 print(intent_model)
 
-slot_optimizer = optim.Adam(slot_model.parameters(), lr=0.001)
-intent_optimizer = optim.Adam(intent_model.parameters(), lr=0.001)
+slot_optimizer = optim.Adam(slot_model.parameters(), lr=cfg.learning_rate)       # optim.Adamax
+intent_optimizer = optim.Adam(intent_model.parameters(), lr=cfg.learning_rate)   # optim.Adamax
 
 best_correct_num = 0
 best_epoch = -1
+best_F1_score = 0.0
+best_epoch_slot = -1
 for epoch in range(epoch_num):
     slot_loss_history = []
     intent_loss_history = []
@@ -126,9 +128,13 @@ for epoch in range(epoch_num):
                 FN += 1
 
     F1_score = 100.0*2*TP/(2*TP+FN+FP)
+    if F1_score > best_F1_score:
+        best_F1_score = F1_score
+        best_epoch_slot = epoch
     print('*'*20)
     print('Epoch: [{}/{}], Intent Val Acc: {:.4f} \t Slot F1 score: {:.4f}'.format(epoch+1, epoch_num, 100.0*correct_num/total_test, F1_score))
     print('*'*20)
     
     print('Best Intent Acc: {:.4f} at Epoch: [{}]'.format(100.0*best_correct_num/total_test, best_epoch+1))
+    print('Best F1 score: {:.4f} at Epoch: [{}]'.format(best_F1_score, best_epoch_slot+1))
 

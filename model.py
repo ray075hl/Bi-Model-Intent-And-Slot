@@ -16,7 +16,7 @@ class slot_enc(nn.Module):
 
         self.embedding = nn.Embedding(vocab_size, embedding_size).to(device)
         self.lstm = nn.LSTM(input_size=embedding_size, hidden_size=lstm_hidden_size, num_layers=2,\
-                            bidirectional= True, batch_first=True)
+                            bidirectional= True, batch_first=True) #, dropout=DROPOUT)
 
     def forward(self, x):
         x = self.embedding(x)
