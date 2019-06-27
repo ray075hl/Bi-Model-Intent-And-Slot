@@ -42,6 +42,11 @@ def makeindex(filename):
 train_data = makeindex(cfg.train_file)
 test_data = makeindex(cfg.test_file)
 
+index2slot_dict = {}
+for key in slot_dict:
+    index2slot_dict[slot_dict[key]] = key
+
+
 print('Number of training samples: ', len(train_data))
 print('Number of test samples: ', len(test_data))
 print('Number of words: ', len(word_dict))

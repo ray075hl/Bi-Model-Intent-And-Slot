@@ -37,7 +37,7 @@ with open(cfg.vocab_slot_file) as f:
         slot_dict[line.strip()] = i
 
 
-# print(slot_dict)
+print(slot_dict)
 
 # Make intent dict 
 intent_dict = {}

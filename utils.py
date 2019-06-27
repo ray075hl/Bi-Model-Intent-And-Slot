@@ -66,3 +66,38 @@ def get_batch(data, batch_size=batch):
 
         yield (sentence, real_len, slot_label, intent_label)
 
+def get_chunks(labels):
+    chunks = []
+    start_idx,end_idx = 0,0
+    for idx in range(1,len(labels)-1):
+        chunkStart, chunkEnd = False,False
+        if labels[idx-1] not in ('O', '<pad>', '<unk>', '<s>', '</s>', '<STOP>', '<START>'):
+            prevTag, prevType = labels[idx-1][:1], labels[idx-1][2:]
+        else:
+            prevTag, prevType = 'O', 'O'
+        if labels[idx] not in ('O', '<pad>', '<unk>', '<s>', '</s>', '<STOP>', '<START>'):
+            Tag, Type = labels[idx][:1], labels[idx][2:]
+        else:
+            Tag, Type = 'O', 'O'
+        if labels[idx+1] not in ('O', '<pad>', '<unk>', '<s>', '</s>', '<STOP>', '<START>'):
+            nextTag, nextType = labels[idx+1][:1], labels[idx+1][2:]
+        else:
+            nextTag, nextType = 'O', 'O'
+
+        if (Tag == 'B' and prevTag in ('B', 'I', 'O')) or (prevTag, Tag) in [('O', 'I'), ('E', 'E'), ('E', 'I'), ('O', 'E')]:
+            chunkStart = True
+        if Tag != 'O' and prevType != Type:
+            chunkStart = True
+
+        if (Tag in ('B','I') and nextTag in ('B','O')) or (Tag == 'E' and nextTag in ('E', 'I', 'O')):
+            chunkEnd = True
+        if Tag != 'O' and Type != nextType:
+            chunkEnd = True
+
+        if chunkStart:
+            start_idx = idx
+        if chunkEnd:
+            end_idx = idx
+            chunks.append((start_idx,end_idx,Type))
+            start_idx,end_idx = 0,0
+    return chunks
