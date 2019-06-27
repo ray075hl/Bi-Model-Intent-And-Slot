@@ -1,16 +1,14 @@
-from model import *
- 
-
 from torch import optim
 import numpy as np
 import torch
 
 import utils
-
 from config import device
-#from data_processing import train_data_list, test_data_list
+import config as cfg
 from data2index_ver2 import train_data, test_data
-epoch_num = 500
+from model import *
+
+epoch_num = cfg.total_epoch
 
 slot_model = Slot().to(device)
 intent_model = Intent().to(device)
@@ -27,23 +25,28 @@ for epoch in range(epoch_num):
     slot_loss_history = []
     intent_loss_history = []
     for batch_index, data in enumerate(utils.get_batch(train_data)):
-        # print(batch_index)
+
+	    # Preparing data
         sentence, real_len, slot_label, intent_label = data
-        # print(sentence)
+
         mask = utils.make_mask(real_len).to(device)
-        slot_optimizer.zero_grad()
-        # print(sentence[0].shape, real_len.shape, slot_label.shape)
         x = torch.tensor(sentence).to(device)
         y_slot = torch.tensor(slot_label).to(device)
         y_slot = utils.one_hot(y_slot).to(device)
         y_intent = torch.tensor(intent_label).to(device)
         y_intent = utils.one_hot(y_intent, Num=18).to(device)
-        # print(x.size(), y.size())
+
+		# Calculate compute graph
+        slot_optimizer.zero_grad()
+        intent_optimizer.zero_grad()
+		
         hs = slot_model.enc(x)
         slot_model.share_memory = hs.clone()
-        intent_optimizer.zero_grad()
+
         hi = intent_model.enc(x)
         intent_model.share_memory = hi.clone()
+		
+		
         slot_logits = slot_model.dec(hs, intent_model.share_memory.detach())
         log_slot_logits = utils.masked_log_softmax(slot_logits, mask, dim=-1)
         slot_loss = -1.0*torch.sum(y_slot*log_slot_logits)
@@ -52,10 +55,7 @@ for epoch in range(epoch_num):
         torch.nn.utils.clip_grad_norm_(slot_model.parameters(), 5.0)
         slot_optimizer.step()
 
-        ##############################################
-        #intent_optimizer.zero_grad()
-        #hi = intent_model.enc(x)
-        #intent_model.share_memory = hi.clone()
+        # Asynchronous training
         intent_logits = intent_model.dec(hi, slot_model.share_memory.detach(), real_len)
         log_intent_logits = F.log_softmax(intent_logits, dim=-1)
         intent_loss = -1.0*torch.sum(y_intent*log_intent_logits)
@@ -63,14 +63,14 @@ for epoch in range(epoch_num):
         intent_loss.backward()
         torch.nn.utils.clip_grad_norm_(intent_model.parameters(), 5.0)
         intent_optimizer.step()
-
+        
+		# Log
         if batch_index % 100 == 0 and batch_index > 0:
             print('Slot loss: {:.4f} \t Intent loss: {:.4f}'.format(sum(slot_loss_history[-100:])/100.0, \
                 sum(intent_loss_history[-100:])/100.0))
 
-    # evaluation
+    # Evaluation 
     total_test = len(test_data)
-    # print(total_test)
     correct_num = 0
 
     for batch_index, data_test in enumerate(utils.get_batch(test_data, batch_size=1)):
@@ -83,7 +83,7 @@ for epoch in range(epoch_num):
 
         mask_test = utils.make_mask(real_len_test, batch=1).to(device)
         hi_test = intent_model.enc(x_test)
-        # intent_logits_test = intent_model.dec(hi_test, torch.zeros(1, 50, 400).to(device), real_len_test)
+        
         intent_logits_test = intent_model.dec(hi_test, hs_test, real_len_test)
         log_intent_logits_test = F.log_softmax(intent_logits_test, dim=-1)
         res_test = torch.argmax(log_intent_logits_test, dim=-1)
@@ -94,6 +94,9 @@ for epoch in range(epoch_num):
         if correct_num > best_correct_num:
             best_correct_num = correct_num
             best_epoch = epoch
+			# Save and load the entire model.
+            torch.save(intent_model, 'model_intent_best.ckpt')
+            torch.save(slot_model, 'model_slot_best.ckpt')
     
     print('*'*20)
     print('Epoch: [{}/{}], Intent Val Acc: {:.4f}'.format(epoch+1, epoch_num, 100.0*correct_num/total_test))

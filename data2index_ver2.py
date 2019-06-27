@@ -1,13 +1,6 @@
 from make_dict import word_dict, intent_dict, slot_dict
-max_len = 50
-
-def convert_int(arr):
-
-    try:
-        a = int(arr)
-    except:
-        return None
-    return a
+from make_dict import convert_int
+import config as cfg
 
 def makeindex(filename):
     train_data = []
@@ -37,21 +30,21 @@ def makeindex(filename):
 
                 train_intent = intent_dict[ line[-1].split(';')[0] ]
 
-            while len(sample_sentence) < max_len:
+            while len(sample_sentence) < cfg.max_len:
                 sample_sentence.append(word_dict['PAD'])
-            while len(sample_slot) < max_len:
+            while len(sample_slot) < cfg.max_len:
                 sample_slot.append(slot_dict['O'])
 
             train_data.append([sample_sentence, real_length, sample_slot, train_intent])
     return train_data
 
 
-train_data = makeindex('train_dev')
-test_data = makeindex('test')
+train_data = makeindex(cfg.train_file)
+test_data = makeindex(cfg.test_file)
 
 print('Number of training samples: ', len(train_data))
 print('Number of test samples: ', len(test_data))
-print('Scale of words vocab: ', len(word_dict))
+print('Number of words: ', len(word_dict))
 print('Number of intent labels: ', len(intent_dict))
 print('Number of slot labels', len(slot_dict))
 
