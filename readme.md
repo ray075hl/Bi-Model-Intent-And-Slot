@@ -1,4 +1,4 @@
-#Bi-Model-Intent-And-Slot
+# Bi-Model-Intent-And-Slot
 
 Pytorch implementation of paper ["A Bi-model based RNN Semantic Frame Parsing Model for Intent
 Detection and Slot Filling".](https://www.aclweb.org/anthology/N18-2050)
