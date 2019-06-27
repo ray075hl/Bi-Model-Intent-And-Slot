@@ -1,5 +1,13 @@
 words = []
 
+def convert_int(arr):
+
+    try:
+        a = int(arr)
+    except:
+        return None
+    return a
+
 with open('train_dev') as f:
     for line in f.readlines():
         line = line.strip().lower().split()
@@ -8,7 +16,10 @@ with open('train_dev') as f:
             word = item.split(':')[0]
             if word == '<=>':
                 break
-            words.append(word)
+            if convert_int(word) is not None:
+                words.append('DIGIT' * len(word))
+            else:        
+                words.append(word)
 
 words_vocab = sorted(set(words))
 

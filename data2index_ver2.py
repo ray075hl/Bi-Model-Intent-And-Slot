@@ -1,6 +1,13 @@
 from make_dict import word_dict, intent_dict, slot_dict
 max_len = 50
 
+def convert_int(arr):
+
+    try:
+        a = int(arr)
+    except:
+        return None
+    return a
 
 def makeindex(filename):
     train_data = []
@@ -15,7 +22,10 @@ def makeindex(filename):
                 if word == '<=>':
                     real_length = index
                     break
-
+                if convert_int(word) is not None:
+                    word =  'DIGIT' * len(word)
+                else:
+                    pass
                 slot = item.split(':')[1]
 
                 if word in word_dict:

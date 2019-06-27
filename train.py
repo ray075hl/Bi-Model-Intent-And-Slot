@@ -9,11 +9,14 @@ import utils
 
 from config import device
 #from data_processing import train_data_list, test_data_list
-from data2index import train_data, test_data
-epoch_num = 50
+from data2index_ver2 import train_data, test_data
+epoch_num = 500
 
 slot_model = Slot().to(device)
 intent_model = Intent().to(device)
+
+print(slot_model)
+print(intent_model)
 
 slot_optimizer = optim.Adam(slot_model.parameters(), lr=0.001)
 intent_optimizer = optim.Adam(intent_model.parameters(), lr=0.001)
@@ -38,6 +41,9 @@ for epoch in range(epoch_num):
         # print(x.size(), y.size())
         hs = slot_model.enc(x)
         slot_model.share_memory = hs.clone()
+        intent_optimizer.zero_grad()
+        hi = intent_model.enc(x)
+        intent_model.share_memory = hi.clone()
         slot_logits = slot_model.dec(hs, intent_model.share_memory.detach())
         log_slot_logits = utils.masked_log_softmax(slot_logits, mask, dim=-1)
         slot_loss = -1.0*torch.sum(y_slot*log_slot_logits)
@@ -47,9 +53,9 @@ for epoch in range(epoch_num):
         slot_optimizer.step()
 
         ##############################################
-        intent_optimizer.zero_grad()
-        hi = intent_model.enc(x)
-        intent_model.share_memory = hi.clone()
+        #intent_optimizer.zero_grad()
+        #hi = intent_model.enc(x)
+        #intent_model.share_memory = hi.clone()
         intent_logits = intent_model.dec(hi, slot_model.share_memory.detach(), real_len)
         log_intent_logits = F.log_softmax(intent_logits, dim=-1)
         intent_loss = -1.0*torch.sum(y_intent*log_intent_logits)
@@ -93,5 +99,5 @@ for epoch in range(epoch_num):
     print('Epoch: [{}/{}], Intent Val Acc: {:.4f}'.format(epoch+1, epoch_num, 100.0*correct_num/total_test))
     print('*'*20)
     
-    print('Best Intent Acc: {:.4f} at Epoch: [{}]'.format(best_correct_num/total_test, best_epoch+1))
+    print('Best Intent Acc: {:.4f} at Epoch: [{}]'.format(100.0*best_correct_num/total_test, best_epoch+1))
 

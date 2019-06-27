@@ -2,7 +2,7 @@ import torch
 import numpy as np
 
 
-def make_mask(real_len, max_len=50, label_size=127, batch=16):
+def make_mask(real_len, max_len=50, label_size=130, batch=16):
     mask = torch.zeros(batch, max_len, label_size)
     for index, item in enumerate(real_len):
         mask[index, :item, :] = 1.0
@@ -19,7 +19,7 @@ def masked_log_softmax(vector: torch.Tensor, mask: torch.Tensor, dim: int = -1) 
     return torch.nn.functional.log_softmax(vector, dim=dim)
 
 
-def one_hot(array, Num=127, maxlen=50):
+def one_hot(array, Num=130, maxlen=50):
 
     shape = array.size()
     batch = shape[0]
