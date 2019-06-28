@@ -9,7 +9,10 @@ We only build the model with decoder.
 
 We do not tune the hyper-parameters carefully as it is so boring. Obtaining best result of **intent accuracy** is 0.9843 and f1 score of **slot filling** is 0.9563 when model runs a lot of epoch(need some lucky), but still lower than the claimed result of that paper(0.9899, 0.9689).
 
-
+| ---       | Intent acc | Slot filling F1 |
+| --------- | ---------- | --------------- |
+| paper     | 0.9899     | 0.9689          |
+| reproduce | 0.9843     | 0.9600          |
 
 ### Setup
 
