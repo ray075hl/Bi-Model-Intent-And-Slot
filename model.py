@@ -50,7 +50,7 @@ class slot_dec(nn.Module):
             else:
                 out, hidden_state = self.lstm(torch.cat((x[i].unsqueeze(1), out), dim=-1), hidden_state)
             all_out.append(out)
-        output = torch.cat(all_out, dim=1) # 50 x batch x feature_size
+        output = torch.cat(all_out, dim=1) # batch x 50 x feature_size
         x = F.dropout(x, DROPOUT)
         res = self.fc(output)
         return res 
